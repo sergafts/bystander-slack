@@ -1,3 +1,5 @@
+all: down build up logs
+
 up:
 	docker-compose up -d
 
@@ -12,3 +14,7 @@ build: down
 
 logs:
 	docker-compose logs -f --tail=40
+
+ctags:
+	ctags -R .
+
