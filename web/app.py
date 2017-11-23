@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 
-@app.route('/', methods=['POST'])
+@app.route('/command', methods=['POST'])
 def main():
     users_pat = re.compile(r'<@[^>]+>')
     text = request.form.get('text', '')
