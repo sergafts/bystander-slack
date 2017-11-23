@@ -17,4 +17,3 @@ logs:
 
 ctags:
 	ctags -R .
-
