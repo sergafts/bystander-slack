@@ -6,7 +6,8 @@ from uuid import uuid4
 from redis import Redis
 
 from .conf import EXPIRE_SECONDS
-from .slack import get_usergroup, post_ephemeral, user_is_active, post_channel
+from .slack import (get_members, get_usergroup, post_channel, post_ephemeral,
+                    user_is_active)
 
 
 REDIS = Redis('redis', '6379')
@@ -36,7 +37,8 @@ class Bystander(object):
 
         bystander = cls(data['text'], data['requester_id'], data['channel_id'])
         bystander.id = id
-        bystander.user_ids = data['users']
+        bystander.user_ids = data['user_ids']
+        bystander.usergroup_ids = data['usergroup_ids']
         bystander.text = data['text']
         bystander.rejected_user_ids = data['rejected_user_ids']
 
@@ -44,9 +46,10 @@ class Bystander(object):
 
     def save(self):
         if self.id is None:
-            self.id = uuid4().bytes
+            self.id = str(uuid4())
         REDIS.set(self.id,
                   json.dumps({'user_ids': self.user_ids,
+                              'usergroup_ids': self.usergroup_ids,
                               'text': self.text,
                               'requester_id': self.requester_id,
                               'channel_id': self.channel_id,
@@ -57,35 +60,36 @@ class Bystander(object):
         REDIS.delete(self.id)
 
     def process_text(self):
-        users_pat = re.compile(r'<@[^>]+>')
+        users_pat = re.compile(r'<@([^|]+)\|[^>]+>')
+        usergroups_pat = re.compile(r'<!subteam\^([^|]+)\|@[^>]+>')
 
         # Find users
-        user_strings = list(set(users_pat.findall(self.raw_text)))
-        self.user_ids = [
-            re.search(r'<@([^|]+)\|[^>]+>', user_string).groups()[0]
-            for user_string in user_strings
+        self.user_ids = [match.groups()[0]
+                         for match in users_pat.finditer(self.raw_text)]
+        self.usergroup_ids = [
+            match.groups()[0]
+            for match in usergroups_pat.finditer(self.raw_text)
         ]
 
         # Clean text
         self.text = users_pat.sub('', self.raw_text)
+        self.text = usergroups_pat.sub('', self.text)
         self.text = re.sub(r'\s+', ' ', self.text).strip()
 
     def resolve_usergroups(self):
-        to_remove, to_add = [], []
-        for i, user_id in enumerate(self.user_ids):
-            users = get_usergroup(user_id)
-            if users:
-                to_remove.append(i)
-                to_add.extend(users)
-        for i in reversed(to_remove):
-            del self.user_ids[i]
-        self.user_ids.extend(to_add)
-        self.user_ids = list(set(self.user_ids))
+        user_ids = set(self.user_ids)
+        for i, usergroup_id in enumerate(self.usergroup_ids):
+            user_ids |= set(get_usergroup(usergroup_id))
+        self.user_ids = list(user_ids)
 
     def filter_out_inactive_users(self):
         self.user_ids = [user_id
                          for user_id in self.user_ids
                          if user_is_active(user_id)]
+
+    def filter_out_users_not_in_channel(self):
+        self.user_ids = list(set(self.user_ids) &
+                             set(get_members(self.channel_id)))
 
     def filter_out_requester(self):
         try:
@@ -98,9 +102,10 @@ class Bystander(object):
         return list(set(self.user_ids) - set(self.rejected_user_ids))
 
     def send_buttons(self):
-        user_id, username = random.choice(self.user_ids_left)
+        user_id = random.choice(self.user_ids_left)
         post_ephemeral(self.channel_id, user_id,
-                       "<@{}> has asked you to:".format(self.requester_id),
+                       "<@{}>, <@{}> has asked you to:".
+                       format(user_id, self.requester_id),
                        [{'text': self.text},
                         {'text': "Are you up for it:?",
                          "callback_id": "{}:{}".format(self.id,
@@ -117,7 +122,9 @@ class Bystander(object):
         self.rejected_user_ids.append(user_id)
 
     def accept(self, user_id):
-        post_channel(self.channel_id, "<@{}> accepted <@{}>'s request to:",
+        post_channel(self.channel_id,
+                     "<@{}> accepted <@{}>'s request to:".
+                     format(user_id, self.requester_id),
                      [{'text': self.text}])
 
     def abort(self):
