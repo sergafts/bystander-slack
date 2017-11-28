@@ -3,7 +3,21 @@ services:
   web:
     build:
       context: .
+      dockerfile: Dockerfile-web
     ports:
       - "80:5000"
-#   volumes:
-#     - ./web:/app/web
+    depends_on:
+      - redis
+      - worker
+    # volumes:
+      # - ./web:/app/web
+
+  redis:
+    image: redis:3.2
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile-worker
+    depends_on:
+        - redis
