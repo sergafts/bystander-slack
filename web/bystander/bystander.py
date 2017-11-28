@@ -18,6 +18,13 @@ class BystanderError(Exception):
 
 
 class Bystander(object):
+    """ Class to do the heavylifting of the app.
+
+        All the methods (so far) are public and define the interface of the
+        class. It is advised to not call any of these methods from within the
+        class.
+    """
+
     def __init__(self, raw_text, requester_id, channel_id):
         self.id = None
 
@@ -62,6 +69,10 @@ class Bystander(object):
         REDIS.delete(self.id)
 
     def process_text(self):
+        """ Process the raw text of the request into the users and groups it's
+            directed at
+        """
+
         users_pat = re.compile(r'<@([^|]+)\|[^>]+>')
         usergroups_pat = re.compile(r'<!subteam\^([^|]+)\|@[^>]+>')
         here_pat = re.compile(r'<!(channel|here)>')
@@ -82,6 +93,8 @@ class Bystander(object):
         self.text = re.sub(r'\s+', ' ', self.text).strip()
 
     def resolve_usergroups(self):
+        "Expand the usergroups into their lists of users"
+
         user_ids = set(self.user_ids)
         for i, usergroup_id in enumerate(self.usergroup_ids):
             user_ids |= set(get_usergroup(usergroup_id))
@@ -93,12 +106,16 @@ class Bystander(object):
                          if user_is_active(user_id)]
 
     def filter_out_users_not_in_channel(self):
+        """ Compare userlist with users in the channel; filter out members that
+            don't belong to the channel or include the whole channel if the
+            request was sent to '@here' or '@channel'
+        """
+
         if self.here:
             self.user_ids = list(set(self.user_ids) |
                                  set(get_members(self.channel_id)))
         else:
-            self.user_ids = list(set(self.user_ids) &
-                                 set(get_members(self.channel_id)))
+            self.user_ids = get_members(self.channel_id)
 
     def filter_out_requester(self):
         try:
@@ -111,6 +128,10 @@ class Bystander(object):
         return list(set(self.user_ids) - set(self.rejected_user_ids))
 
     def send_buttons(self):
+        """ Send the message with the buttons to a randomly selected user in
+            the request
+        """
+
         user_id = random.choice(self.user_ids_left)
         post_ephemeral(self.channel_id, user_id,
                        "<@{}>, <@{}> has asked you to:".
