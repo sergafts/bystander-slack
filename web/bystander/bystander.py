@@ -46,7 +46,6 @@ class Bystander(object):
         bystander.id = id
         bystander.user_ids = data['user_ids']
         bystander.usergroup_ids = data['usergroup_ids']
-        bystander.here = data['here']
         bystander.text = data['text']
         bystander.rejected_user_ids = data['rejected_user_ids']
 
@@ -58,7 +57,6 @@ class Bystander(object):
         REDIS.set(self.id,
                   json.dumps({'user_ids': self.user_ids,
                               'usergroup_ids': self.usergroup_ids,
-                              'here': self.here,
                               'text': self.text,
                               'requester_id': self.requester_id,
                               'channel_id': self.channel_id,
@@ -75,7 +73,6 @@ class Bystander(object):
 
         users_pat = re.compile(r'<@([^|]+)\|[^>]+>')
         usergroups_pat = re.compile(r'<!subteam\^([^|]+)\|@[^>]+>')
-        here_pat = re.compile(r'<!(channel|here)>')
 
         # Find users
         self.user_ids = [match.groups()[0]
@@ -84,12 +81,10 @@ class Bystander(object):
             match.groups()[0]
             for match in usergroups_pat.finditer(self.raw_text)
         ]
-        self.here = bool(here_pat.search(self.raw_text))
 
         # Clean text
         self.text = users_pat.sub('', self.raw_text)
         self.text = usergroups_pat.sub('', self.text)
-        self.text = here_pat.sub('', self.text)
         self.text = re.sub(r'\s+', ' ', self.text).strip()
 
     def resolve_usergroups(self):
@@ -106,16 +101,10 @@ class Bystander(object):
                          if user_is_active(user_id)]
 
     def filter_out_users_not_in_channel(self):
-        """ Compare userlist with users in the channel; filter out members that
-            don't belong to the channel or include the whole channel if the
-            request was sent to '@here' or '@channel'
-        """
+        "Filter out members that don't belong to the channel"
 
-        if self.here:
-            self.user_ids = list(set(self.user_ids) |
-                                 set(get_members(self.channel_id)))
-        else:
-            self.user_ids = get_members(self.channel_id)
+        self.user_ids = list(set(self.user_ids) &
+                             set(get_members(self.channel_id)))
 
     def filter_out_requester(self):
         try:
