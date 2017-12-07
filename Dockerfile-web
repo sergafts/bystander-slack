@@ -7,4 +7,5 @@ RUN pip install --upgrade pip
 RUN pip install -r /requirements.txt
 COPY . /app
 WORKDIR /app/web
-CMD python runserver.py
+ENV FLASK_APP bystander/server.py
+CMD flask run --with-threads -h 0.0.0.0 -p 5000
