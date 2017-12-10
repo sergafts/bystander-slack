@@ -5,12 +5,12 @@ services:
       context: .
       dockerfile: Dockerfile-web
     ports:
-      - "80:5000"
+      - 5000:5000
     depends_on:
       - redis
       - worker
-    # volumes:
-      # - ./web:/app/web
+    volumes:
+      - ./web:/app/web
 
   redis:
     image: redis:3.2
@@ -21,3 +21,5 @@ services:
       dockerfile: Dockerfile-worker
     depends_on:
         - redis
+    volumes:
+      - ./web:/app/web
