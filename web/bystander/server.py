@@ -1,8 +1,9 @@
 import json
+
 from flask import Flask, request, jsonify, abort
 
 from .conf import INCOMING_TOKEN
-from .tasks import start_bystander, accept_bystander, reject_bystander
+from .tasks import begin, accept, reject
 
 
 app = Flask(__name__)
@@ -25,10 +26,8 @@ def command():
     app.logger.info("Got request with raw_text: '%s', user_id: '%s', "
                     "channel_id: '%s'",
                     raw_text, user_id, channel_id)
-    start_bystander.delay(raw_text, user_id, channel_id)
-    return jsonify({'response_type': "ephemeral",
-                    'text': "Roger, will assign the task to a teammate",
-                    'attachments': [{'text': raw_text}]})
+    begin.delay(raw_text, user_id, channel_id)
+    return ""
 
 
 @app.route('/button', methods=['POST'])
@@ -39,14 +38,13 @@ def button():
     if data['token'] != INCOMING_TOKEN:
         abort(401)
 
-    id, requester_id = data['callback_id'].split(':', 1)
+    id = data['callback_id']
     user_id = data['user']['id']
-    channel_id = data['channel']['id']
 
     if data['actions'][0]['name'] == "yes":
-        accept_bystander.delay(id, user_id, channel_id, requester_id)
+        accept.delay(id, user_id)
     else:
-        reject_bystander.delay(id, user_id, channel_id, requester_id)
+        reject.delay(id, user_id)
 
     return jsonify({'response_type': "ephemeral",
                     'text': "Thank you for your choice"})

@@ -5,7 +5,7 @@ MAINTAINER Konstantinos Bairaktaris "ikijob@gmail.com"
 COPY ./web/requirements.txt /
 RUN pip install --upgrade pip
 RUN pip install -r /requirements.txt
-COPY . /app
-WORKDIR /app/web
-ENV FLASK_APP bystander/server.py
+COPY ./web /app
+WORKDIR /app
+ENV FLASK_APP runserver.py
 CMD flask run --with-threads -h 0.0.0.0 -p 5000

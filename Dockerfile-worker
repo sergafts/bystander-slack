@@ -7,6 +7,6 @@ RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 RUN groupadd user && useradd --create-home --home-dir /home/user -g user user
 USER user
-COPY . /app
-WORKDIR /app/web
+COPY ./web /app
+WORKDIR /app
 CMD celery -A bystander.tasks worker -l info
