@@ -6,6 +6,9 @@ from uuid import uuid4
 from redis import Redis
 
 from .conf import EXPIRE_SECONDS
+from .messages import (ACKGNOWLEDGE_MSG, CALL_TO_ACTION_MSG, TIMEOUT_MSG,
+                       NOT_ENOUGH_RECIPIENTS_MSG, ABORT_MSG, ACCEPT_MSG,
+                       REJECT_MSG)
 from .slack import (get_members, get_usergroup, post_channel, post_ephemeral,
                     user_is_active)
 
@@ -125,9 +128,16 @@ class Bystander(object):
                                     self.rejected)
 
     def ackgnowledge(self):
-        post_ephemeral(self.channel_id, self.requester_id,
-                       "Roger, will assign the task to a teammate",
-                       [{'text': self.text}])
+        post_ephemeral(
+            self.channel_id, self.requester_id,
+            random.choice(ACKGNOWLEDGE_MSG),
+            [
+                {'text': self.text},
+                {'text': "Possible recipients are: {}".format(
+                    ", ".join(self.possible_recipients)
+                )}
+            ]
+        )
 
     def send_next(self):
         """ Send the message with the buttons to a randomly selected user in
@@ -139,7 +149,7 @@ class Bystander(object):
                        "<@{}>, <@{}> has asked you to:".
                        format(self.pending_user_id, self.requester_id),
                        [{'text': self.text},
-                        {'text': "Are you up for it:?",
+                        {'text': random.choice(CALL_TO_ACTION_MSG),
                          "callback_id": self.id,
                          "attachment_type": "default",
                          "actions": [{'name': "yes", 'text': "Accept",
@@ -153,16 +163,13 @@ class Bystander(object):
         if not self.pending_user_id:
             raise BystanderError("Called timeout without a pending user")
         post_ephemeral(self.channel_id, self.pending_user_id,
-                       "I'm sorry, you took too much time to respond and now "
-                       "the request is timed out for you :cry:",
-                       [{'text': self.text}])
+                       random.choice(TIMEOUT_MSG), [{'text': self.text}])
         self.timed_out.add(self.pending_user_id)
         self.pending_user_id = None
 
     def send_not_enough_recipients(self):
         post_ephemeral(self.channel_id, self.requester_id,
-                       "I'm sorry, I could not find at least two recipients "
-                       "for your request :cry:",
+                       random.choice(NOT_ENOUGH_RECIPIENTS_MSG)
                        [{'text': self.text}])
 
     def abort(self):
@@ -181,12 +188,13 @@ class Bystander(object):
                 )
             })
         post_ephemeral(self.channel_id, self.requester_id,
-                       "I'm sorry, I have to abort the bystander request; "
-                       "there are not enough users left to send the request "
-                       "to :cry:",
-                       attachments)
+                       random.choice(ABORT_MSG), attachments)
 
     def accept(self, user_id):
+        if not self.pending_user_id or user_id != self.pending_user_id:
+            raise BystanderError("Accept called for wrong user")
+        post_ephemeral(self.channel_id, user_id,
+                       random.choice(ACCEPT_MSG))
         post_channel(self.channel_id,
                      "<@{}> accepted <@{}>'s request to:".
                      format(user_id, self.requester_id),
@@ -195,5 +203,6 @@ class Bystander(object):
     def reject(self, user_id):
         if not self.pending_user_id or user_id != self.pending_user_id:
             raise BystanderError("Reject called for wrong user")
+        post_ephemeral(self.channel_id, user_id, random.choice(REJECT_MSG))
         self.rejected.add(user_id)
         self.pending_user_id = None

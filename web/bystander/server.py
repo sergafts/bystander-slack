@@ -46,5 +46,4 @@ def button():
     else:
         reject.delay(id, user_id)
 
-    return jsonify({'response_type': "ephemeral",
-                    'text': "Thank you for your choice"})
+    return ""
